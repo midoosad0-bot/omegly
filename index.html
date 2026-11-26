@@ -57,6 +57,7 @@ main{flex:1;display:flex;flex-direction:column;min-height:0;padding:10px 16px 12
     <label>Room
       <select id="room"><option value="general">General</option><option value="gaming">Gaming</option><option value="music">Music</option><option value="movies">Movies &amp; TV</option><option value="sports">Sports</option><option value="tech">Tech</option><option value="languages">Languages</option></select>
     </label>
+    <button id="codeBtn" type="button" style="padding:4px 10px;font-size:13px">Have an unlock code?</button>
     <label id="meWrap" style="display:none">I am
       <select id="me"><option value="na">Prefer not to say</option><option value="boy">Boy</option><option value="girl">Girl</option></select>
     </label>
@@ -96,7 +97,7 @@ main{flex:1;display:flex;flex-direction:column;min-height:0;padding:10px 16px 12
 
 <script>
 const $ = id => document.getElementById(id);
-let sid = null, es = null, mode = 'text', inChat = false, searching = false, filterOpen = false;
+let sid = null, es = null, mode = 'text', inChat = false, searching = false, filterOpen = false, unlocked = false;
 let pc = null, localStream = null, pendingIce = [], remoteSet = false, typingT = 0;
 
 /* ---------- age gate ---------- */
@@ -137,14 +138,16 @@ async function connect() {
   } catch { setTimeout(connect, 3000); }
 }
 function setFilter(open) {
-  filterOpen = open;
-  $('meWrap').style.display = open ? '' : 'none';
-  $('want').options[1].text = open ? 'Boys' : 'Boys 🔒';
-  $('want').options[2].text = open ? 'Girls' : 'Girls 🔒';
-  if (!open && $('want').value !== 'any') $('want').value = 'any';
+  if (open !== undefined) filterOpen = open;
+  const eff = filterOpen || unlocked;
+  $('meWrap').style.display = eff ? '' : 'none';
+  $('codeBtn').style.display = eff ? 'none' : '';
+  $('want').options[1].text = eff ? 'Boys' : 'Boys 🔒';
+  $('want').options[2].text = eff ? 'Girls' : 'Girls 🔒';
+  if (!eff && $('want').value !== 'any') $('want').value = 'any';
 }
 $('want').onchange = () => {
-  if (!filterOpen && $('want').value !== 'any') {
+  if (!(filterOpen || unlocked) && $('want').value !== 'any') {
     $('want').value = 'any';
     add('The Boys/Girls filter is locked right now. Use "Contact admin" to ask for access.', 'sys');
   }
@@ -170,7 +173,7 @@ async function start() {
     catch { return add('Camera and microphone access is required for video chat.', 'sys'); }
   }
   closePeer(); $('log').innerHTML = '';
-  const r = await fetch('/api/find', post({ sid, mode, room: $('room').value, want: $('want').value, gender: $('me').value }));
+  const r = await fetch('/api/find', post({ sid, token, mode, room: $('room').value, want: $('want').value, gender: $('me').value }));
   if (r.status === 403) { add('The Boys/Girls filter is locked right now.', 'sys'); $('want').value = 'any'; }
   else if (r.status === 400) add('Please choose your own gender first (I am ...).', 'sys');
 }
@@ -236,6 +239,7 @@ if (!token) { token = [...crypto.getRandomValues(new Uint8Array(16))].map(x => x
 let poll = null;
 async function loadSup() {
   const j = await (await fetch('/api/support/get?token=' + token)).json();
+  if (j.unlocked && !unlocked) { unlocked = true; setFilter(); add('The Boys/Girls filter is now unlocked for you.', 'sys'); }
   const l = $('sLog'); l.innerHTML = '';
   j.msgs.forEach(m => { const d = document.createElement('div'); d.className = 'm ' + (m.from === 'user' ? 'me' : 'st'); d.textContent = (m.from === 'admin' ? 'Admin: ' : '') + m.text; l.appendChild(d); });
   l.scrollTop = l.scrollHeight;
@@ -247,6 +251,14 @@ $('sSend').onclick = async () => {
   await fetch('/api/support/send', post({ token, text })); loadSup();
 };
 $('sTxt').addEventListener('keydown', e => { if (e.key === 'Enter') $('sSend').click(); });
+fetch('/api/support/get?token=' + token).then(r => r.json()).then(j => { if (j.unlocked) { unlocked = true; setFilter(); } }).catch(() => {});
+$('codeBtn').onclick = async () => {
+  const code = prompt('Enter your unlock code');
+  if (!code) return;
+  const r = await fetch('/api/redeem', post({ token, code }));
+  if (r.ok) { unlocked = true; setFilter(); add('Code accepted! You can now choose Boys or Girls.', 'sys'); }
+  else add(r.status === 429 ? 'Too many attempts. Try again later.' : 'Invalid or already used code.', 'sys');
+};
 document.addEventListener('keydown', e => { if (e.key === 'Escape' && !$('gate').classList.contains('show') && sid) start(); });
 </script>
 </body>

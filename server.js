@@ -8,10 +8,11 @@ const crypto = require('crypto');
 const PORT = +process.env.PORT || 3000;
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || crypto.randomBytes(5).toString('hex');
 const DATA_FILE = path.join(__dirname, 'data.json');
-const PUB = path.join(__dirname, 'public');
+// Pages live in ./public, but also work if the html files sit next to server.js (easier to upload from a phone)
+const PUB = fs.existsSync(path.join(__dirname, 'public', 'index.html')) ? path.join(__dirname, 'public') : __dirname;
 
 // ---------- persistent state ----------
-let db = { genderFilterOpen: false, bans: [], reports: [], support: {} };
+let db = { genderFilterOpen: false, bans: [], reports: [], support: {}, codes: {}, unlocked: {} };
 try { db = Object.assign(db, JSON.parse(fs.readFileSync(DATA_FILE, 'utf8'))); } catch {}
 let saveTimer = null;
 const save = () => {
@@ -68,6 +69,7 @@ function findPartner(c) {
 
 // ---------- admin auth ----------
 const failed = new Map(); // ip -> {n, until}
+const redeemFails = new Map(); // ip -> {n, until}
 function isAdmin(req, res) {
   const ip = ipOf(req);
   const f = failed.get(ip);
@@ -123,7 +125,26 @@ async function handle(req, res) {
   // support (user side)
   if (p === '/api/support/get' && req.method === 'GET') {
     const t = url.searchParams.get('token') || '';
-    return json(res, 200, { msgs: (db.support[t] && db.support[t].msgs) || [] });
+    return json(res, 200, { msgs: (db.support[t] && db.support[t].msgs) || [], unlocked: !!db.unlocked[t] });
+  }
+  // redeem an unlock code (unlocks the Boys/Girls filter for this browser)
+  if (p === '/api/redeem' && req.method === 'POST') {
+    const ip = ipOf(req);
+    const f = redeemFails.get(ip);
+    if (f && f.n >= 10 && f.until > Date.now()) return json(res, 429, { error: 'Too many attempts' });
+    const b = await readBody(req);
+    const token = String(b.token || '');
+    const code = clean(b.code, 40).toUpperCase();
+    const c = db.codes[code];
+    if (!/^[a-f0-9]{16,40}$/.test(token) || !c || c.used >= c.max) {
+      const n = ((f && f.n) || 0) + 1;
+      redeemFails.set(ip, { n, until: Date.now() + 10 * 60 * 1000 });
+      return json(res, 400, { error: 'Invalid or used code' });
+    }
+    c.used++;
+    db.unlocked[token] = { code, t: Date.now() };
+    save();
+    return json(res, 200, { ok: true });
   }
   if (p === '/api/support/send' && req.method === 'POST') {
     const b = await readBody(req);
@@ -151,7 +172,9 @@ async function handle(req, res) {
         online: clients.size, waiting: queue.length,
         paired: [...clients.values()].filter(c => c.partner).length / 2,
         genderFilterOpen: db.genderFilterOpen, bans: db.bans, reports: db.reports.slice(-100).reverse(),
-        support: Object.entries(db.support).map(([token, th]) => ({ token, unread: th.unread, updated: th.updated, msgs: th.msgs }))
+        codes: Object.entries(db.codes).map(([code, c]) => ({ code, ...c })).sort((a, b) => b.created - a.created),
+        unlockedCount: Object.keys(db.unlocked).length,
+        support: Object.entries(db.support).map(([token, th]) => ({ token, unread: th.unread, updated: th.updated, msgs: th.msgs, unlocked: !!db.unlocked[token] }))
           .sort((a, b) => b.updated - a.updated).slice(0, 100)
       });
     }
@@ -171,6 +194,18 @@ async function handle(req, res) {
     if (p === '/api/admin/markread') {
       const th = db.support[String(b.token)]; if (th) { th.unread = false; save(); }
       return json(res, 200, { ok: true });
+    }
+    if (p === '/api/admin/code') {
+      const code = crypto.randomBytes(5).toString('hex').toUpperCase();
+      db.codes[code] = { note: clean(b.note, 80), max: Math.min(Math.max(parseInt(b.max, 10) || 1, 1), 1000), used: 0, created: Date.now() };
+      save(); return json(res, 200, { code });
+    }
+    if (p === '/api/admin/delcode') { delete db.codes[String(b.code)]; save(); return json(res, 200, { ok: true }); }
+    if (p === '/api/admin/unlock') {
+      const token = String(b.token || '');
+      if (!/^[a-f0-9]{16,40}$/.test(token)) return json(res, 400, { error: 'bad token' });
+      if (b.on) db.unlocked[token] = { code: 'admin', t: Date.now() }; else delete db.unlocked[token];
+      save(); return json(res, 200, { ok: true });
     }
     if (p === '/api/admin/ban') {
       const ip = clean(b.ip, 64);
@@ -192,7 +227,8 @@ async function handle(req, res) {
     if (p === '/api/find') {
       const gender = ['boy', 'girl', 'na'].includes(b.gender) ? b.gender : 'na';
       const want = ['any', 'boy', 'girl'].includes(b.want) ? b.want : 'any';
-      if (want !== 'any' && !db.genderFilterOpen) return json(res, 403, { error: 'locked' });
+      const tok = String(b.token || '');
+      if (want !== 'any' && !(db.genderFilterOpen || db.unlocked[tok])) return json(res, 403, { error: 'locked' });
       if (want !== 'any' && gender === 'na') return json(res, 400, { error: 'choose your gender first' });
       c.gender = gender; c.want = want;
       c.mode = b.mode === 'video' ? 'video' : 'text';

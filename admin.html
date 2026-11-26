@@ -28,6 +28,10 @@ button{cursor:pointer}button.pri{background:var(--acc);border:0;font-weight:700}
   </div></div>
   <div class="card"><h2>Boys / Girls filter</h2>
     <p class="mut" id="gTxt"></p><button id="gBtn" class="big"></button></div>
+  <div class="card"><h2>Unlock codes</h2>
+    <p class="mut">Give a code to someone after they pay, or as an offer. Entering it unlocks the Boys/Girls filter on their device. You can also unlock one person from the support inbox below.</p>
+    <div class="row"><input id="cNote" placeholder="Note (who / why)"><input id="cMax" type="number" min="1" value="1" style="width:80px"><button class="pri" id="cGen">Create code</button></div>
+    <div id="codes"></div></div>
   <div class="card"><h2>Support inbox</h2><div id="support"></div></div>
   <div class="card"><h2>Reports</h2><div id="reports"></div></div>
   <div class="card"><h2>Banned IPs</h2><div id="bans"></div></div>
@@ -63,7 +67,9 @@ function render(d) {
       const row = el('div', null, 'row'), inp = el('input'); inp.placeholder = 'Reply...'; inp.style.flex = '1';
       const b = el('button', 'Reply', 'pri'); b.onclick = async () => { if (inp.value.trim()) { await api('reply', { token: th.token, text: inp.value }); refresh(); } };
       inp.addEventListener('keydown', e => { if (e.key === 'Enter') b.click(); });
-      row.append(inp, b); box.appendChild(row); sup.appendChild(box);
+      const ub = el('button', th.unlocked ? 'Lock filter for this user' : 'Unlock filter for this user');
+      ub.onclick = async () => { await api('unlock', { token: th.token, on: !th.unlocked }); refresh(); };
+      row.append(inp, b, ub); box.appendChild(row); sup.appendChild(box);
     }); }
   const rep = $('reports'); rep.innerHTML = '';
   if (!d.reports.length) rep.appendChild(el('div', 'No reports.', 'mut'));
@@ -76,10 +82,26 @@ function render(d) {
     const dis = el('button', 'Dismiss'); dis.onclick = async () => { await api('dismiss', { id: r.id }); refresh(); };
     row.append(ban, dis); box.appendChild(row); rep.appendChild(box);
   });
+  renderCodes(d.codes || []);
   const bn = $('bans'); bn.innerHTML = '';
   if (!d.bans.length) bn.appendChild(el('div', 'Nobody banned.', 'mut'));
   d.bans.forEach(ip => { const row = el('div', null, 'row'); row.append(el('span', ip), Object.assign(el('button', 'Unban'), { onclick: async () => { await api('unban', { ip }); refresh(); } })); bn.appendChild(row); });
 }
+function renderCodes(list) {
+  const box = $('codes'); box.innerHTML = '';
+  if (!list.length) box.appendChild(el('div', 'No codes yet.', 'mut'));
+  list.forEach(c => {
+    const row = el('div', null, 'row'); row.style.cssText = 'border-top:1px solid var(--line);padding:8px 0';
+    const code = el('b', c.code); code.style.cssText = 'font-family:monospace;font-size:17px';
+    const cp = el('button', 'Copy'); cp.onclick = () => navigator.clipboard && navigator.clipboard.writeText(c.code);
+    const del = el('button', 'Delete', 'dng'); del.onclick = async () => { await api('delcode', { code: c.code }); refresh(); };
+    row.append(code, el('span', c.used + '/' + c.max + ' used' + (c.note ? ' · ' + c.note : ''), 'mut'), cp, del);
+    box.appendChild(row);
+  });
+}
+$('cGen').onclick = async () => {
+  busy = true; await api('code', { note: $('cNote').value, max: $('cMax').value }); $('cNote').value = ''; busy = false; refresh();
+};
 $('gBtn').onclick = async () => { busy = true; await api('gender', { open: !open }); busy = false; refresh(); };
 </script>
 </body>
