@@ -1,0 +1,253 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Omegly - Talk to strangers</title>
+<meta name="description" content="Omegly is a free random chat site. Talk to strangers from around the world by text or video. 18+ only.">
+<meta property="og:title" content="Omegly - Talk to strangers">
+<meta property="og:description" content="Free random text and video chat with people from around the world.">
+<meta name="theme-color" content="#0f1220">
+<style>
+:root{--bg:#0f1220;--card:#181c30;--line:#2a2f4a;--txt:#e9ecff;--mut:#8b92b8;--acc:#5b8cff;--acc2:#7a5bff;--ok:#2ecc8f;--bad:#ff5b6e}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--txt);font:15px/1.45 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;height:100dvh;display:flex;flex-direction:column}
+header{display:flex;align-items:center;gap:12px;padding:10px 16px;border-bottom:1px solid var(--line);background:var(--card)}
+.logo{font-weight:800;font-size:22px;background:linear-gradient(90deg,var(--acc),var(--acc2));-webkit-background-clip:text;background-clip:text;color:transparent}
+.sp{flex:1}.online{color:var(--mut);font-size:13px}.online b{color:var(--ok)}
+button,select{font:inherit;color:var(--txt);background:#232845;border:1px solid var(--line);border-radius:10px;padding:8px 14px;cursor:pointer}
+button:hover{border-color:var(--acc)}button:disabled{opacity:.5;cursor:not-allowed}
+button.pri{background:linear-gradient(90deg,var(--acc),var(--acc2));border:0;font-weight:700}
+button.dng{color:var(--bad)}
+.tabs{display:flex;gap:6px;padding:10px 16px 0}.tabs button.on{background:var(--acc);border-color:var(--acc)}
+main{flex:1;display:flex;flex-direction:column;min-height:0;padding:10px 16px 12px;gap:10px}
+.opts{display:flex;gap:10px;flex-wrap:wrap;align-items:center;font-size:13px;color:var(--mut)}
+#videos{display:none;position:relative;background:#000;border-radius:14px;overflow:hidden;height:38vh;min-height:180px}
+#videos.show{display:block}
+#remote{width:100%;height:100%;object-fit:cover;background:#05060c}
+#local{position:absolute;right:10px;bottom:10px;width:26%;max-width:180px;border-radius:10px;border:2px solid var(--line);background:#111;transform:scaleX(-1)}
+#log{flex:1;min-height:0;overflow-y:auto;background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px;display:flex;flex-direction:column;gap:6px}
+.m{max-width:80%;padding:7px 12px;border-radius:14px;word-wrap:break-word;white-space:pre-wrap}
+.m.me{align-self:flex-end;background:var(--acc);border-bottom-right-radius:4px}
+.m.st{align-self:flex-start;background:#2a2f4a;border-bottom-left-radius:4px}
+.m.sys{align-self:center;color:var(--mut);font-size:13px;text-align:center}
+#typing{height:16px;color:var(--mut);font-size:12px;padding-left:4px}
+.bar{display:flex;gap:8px}
+#txt{flex:1;background:var(--card);border:1px solid var(--line);color:var(--txt);border-radius:10px;padding:10px 14px;font:inherit;min-width:0}
+.fab{position:fixed;right:14px;bottom:84px}
+.modal{position:fixed;inset:0;background:rgba(5,6,12,.8);display:none;align-items:center;justify-content:center;padding:16px;z-index:10}
+.modal.show{display:flex}
+.box{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:20px;width:100%;max-width:420px;max-height:88dvh;display:flex;flex-direction:column;gap:12px}
+.box h2{margin:0}.box p{margin:0;color:var(--mut);font-size:14px}
+#sLog{overflow-y:auto;display:flex;flex-direction:column;gap:6px;min-height:120px;max-height:40dvh}
+.row{display:flex;gap:8px;flex-wrap:wrap}
+</style>
+</head>
+<body>
+<header>
+  <span class="logo">Omegly</span><span class="sp"></span>
+  <span class="online"><b id="onl">0</b> online</span>
+</header>
+<div class="tabs"><button id="tText" class="on">Text chat</button><button id="tVideo">Video chat</button></div>
+<main>
+  <div class="opts">
+    <label>Chat with
+      <select id="want"><option value="any">Anyone</option><option value="boy">Boys</option><option value="girl">Girls</option></select>
+    </label>
+    <label>Room
+      <select id="room"><option value="general">General</option><option value="gaming">Gaming</option><option value="music">Music</option><option value="movies">Movies &amp; TV</option><option value="sports">Sports</option><option value="tech">Tech</option><option value="languages">Languages</option></select>
+    </label>
+    <label id="meWrap" style="display:none">I am
+      <select id="me"><option value="na">Prefer not to say</option><option value="boy">Boy</option><option value="girl">Girl</option></select>
+    </label>
+  </div>
+  <div id="videos"><video id="remote" autoplay playsinline></video><video id="local" autoplay playsinline muted></video></div>
+  <div id="log"></div>
+  <div id="typing"></div>
+  <div class="bar">
+    <button id="next" class="pri">Start</button>
+    <input id="txt" placeholder="Type a message..." maxlength="500" autocomplete="off" disabled>
+    <button id="send" disabled>Send</button>
+  </div>
+  <div class="row"><button id="stop" disabled>Stop</button><button id="report" class="dng" disabled>Report</button><a href="/terms" target="_blank" style="color:var(--mut);font-size:13px;align-self:center;margin-left:auto">Terms &amp; Privacy</a></div>
+</main>
+<button class="fab" id="supBtn">Contact admin</button>
+
+<!-- age gate -->
+<div class="modal" id="gate"><div class="box">
+  <h2>Omegly is for adults only</h2>
+  <p>You must be 18 or older to use this site. You will be talking to strangers: never share personal information, and use Report if anyone makes you uncomfortable. Conversations are not recorded, but reports save the last messages for review, and abusive users are banned. By continuing you accept the <a href="/terms" target="_blank" style="color:var(--acc)">Terms &amp; Privacy</a>.</p>
+  <div class="row"><button class="pri" id="yes">I am 18 or older</button><button id="no">Leave</button></div>
+</div></div>
+
+<!-- report -->
+<div class="modal" id="rep"><div class="box">
+  <h2>Report this user</h2><p>The last messages of this chat will be sent to the admin.</p>
+  <div class="row" id="reasons"></div><button id="repX">Cancel</button>
+</div></div>
+
+<!-- support -->
+<div class="modal" id="sup"><div class="box">
+  <h2>Contact the admin</h2><p>Ask a question, report a problem, or ask to unlock the boys/girls filter. Check back here for a reply.</p>
+  <div id="sLog"></div>
+  <div class="bar"><input id="sTxt" placeholder="Write to the admin..." maxlength="1000" style="flex:1;background:#232845;border:1px solid var(--line);color:var(--txt);border-radius:10px;padding:10px"><button id="sSend" class="pri">Send</button></div>
+  <button id="supX">Close</button>
+</div></div>
+
+<script>
+const $ = id => document.getElementById(id);
+let sid = null, es = null, mode = 'text', inChat = false, searching = false, filterOpen = false;
+let pc = null, localStream = null, pendingIce = [], remoteSet = false, typingT = 0;
+
+/* ---------- age gate ---------- */
+if (localStorage.getItem('omegly_18') !== '1') $('gate').classList.add('show'); else connect();
+$('yes').onclick = () => { localStorage.setItem('omegly_18', '1'); $('gate').classList.remove('show'); connect(); };
+$('no').onclick = () => { location.href = 'https://www.google.com'; };
+
+/* ---------- log ---------- */
+function add(text, cls) {
+  const d = document.createElement('div'); d.className = 'm ' + cls; d.textContent = text;
+  const l = $('log'); l.appendChild(d); l.scrollTop = l.scrollHeight;
+}
+function setState(s) { // idle | waiting | chat
+  inChat = s === 'chat'; searching = s === 'waiting';
+  $('txt').disabled = !inChat; $('send').disabled = !inChat; $('report').disabled = !inChat;
+  $('stop').disabled = s === 'idle';
+  $('next').textContent = s === 'idle' ? 'Start' : 'Next';
+  if (inChat) $('txt').focus();
+}
+
+/* ---------- connection ---------- */
+async function connect() {
+  try {
+    const r = await fetch('/api/session', { method: 'POST' });
+    if (r.status === 403) return add('You have been banned from Omegly.', 'sys');
+    const j = await r.json(); sid = j.sid; setFilter(j.genderFilterOpen);
+    es = new EventSource('/api/events?sid=' + sid);
+    es.addEventListener('config', e => setFilter(JSON.parse(e.data).genderFilterOpen));
+    es.addEventListener('online', e => $('onl').textContent = JSON.parse(e.data).count);
+    es.addEventListener('waiting', () => { setState('waiting'); add('Looking for someone to talk to...', 'sys'); });
+    es.addEventListener('matched', e => onMatched(JSON.parse(e.data)));
+    es.addEventListener('msg', e => { add(JSON.parse(e.data).text, 'st'); $('typing').textContent = ''; });
+    es.addEventListener('typing', () => { $('typing').textContent = 'Stranger is typing...'; clearTimeout(typingT); typingT = setTimeout(() => $('typing').textContent = '', 2000); });
+    es.addEventListener('signal', e => onSignal(JSON.parse(e.data).data));
+    es.addEventListener('partner_left', () => { closePeer(); setState('idle'); add('Stranger has disconnected.', 'sys'); $('typing').textContent = ''; });
+    es.addEventListener('banned', () => { es.close(); closePeer(); setState('idle'); add('You have been banned from Omegly.', 'sys'); });
+    es.onerror = () => { es.close(); closePeer(); setState('idle'); add('Connection lost. Reconnecting...', 'sys'); setTimeout(connect, 2500); };
+  } catch { setTimeout(connect, 3000); }
+}
+function setFilter(open) {
+  filterOpen = open;
+  $('meWrap').style.display = open ? '' : 'none';
+  $('want').options[1].text = open ? 'Boys' : 'Boys 🔒';
+  $('want').options[2].text = open ? 'Girls' : 'Girls 🔒';
+  if (!open && $('want').value !== 'any') $('want').value = 'any';
+}
+$('want').onchange = () => {
+  if (!filterOpen && $('want').value !== 'any') {
+    $('want').value = 'any';
+    add('The Boys/Girls filter is locked right now. Use "Contact admin" to ask for access.', 'sys');
+  }
+};
+
+/* ---------- modes ---------- */
+function setMode(m) {
+  if (m === mode) return;
+  leave(); mode = m;
+  $('tText').classList.toggle('on', m === 'text'); $('tVideo').classList.toggle('on', m === 'video');
+  $('videos').classList.toggle('show', m === 'video');
+  if (m === 'text' && localStream) { localStream.getTracks().forEach(t => t.stop()); localStream = null; $('local').srcObject = null; }
+  $('log').innerHTML = '';
+}
+$('tText').onclick = () => setMode('text');
+$('tVideo').onclick = () => setMode('video');
+
+/* ---------- actions ---------- */
+async function start() {
+  if (!sid) return;
+  if (mode === 'video' && !localStream) {
+    try { localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true }); $('local').srcObject = localStream; }
+    catch { return add('Camera and microphone access is required for video chat.', 'sys'); }
+  }
+  closePeer(); $('log').innerHTML = '';
+  const r = await fetch('/api/find', post({ sid, mode, room: $('room').value, want: $('want').value, gender: $('me').value }));
+  if (r.status === 403) { add('The Boys/Girls filter is locked right now.', 'sys'); $('want').value = 'any'; }
+  else if (r.status === 400) add('Please choose your own gender first (I am ...).', 'sys');
+}
+function leave() { if (sid) fetch('/api/leave', post({ sid })); closePeer(); setState('idle'); }
+const post = o => ({ method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(o) });
+$('next').onclick = start;
+$('stop').onclick = () => { leave(); add('You disconnected.', 'sys'); };
+$('send').onclick = sendMsg;
+$('txt').addEventListener('keydown', e => { if (e.key === 'Enter') sendMsg(); });
+let lastTyping = 0;
+$('txt').addEventListener('input', () => { if (inChat && Date.now() - lastTyping > 1500) { lastTyping = Date.now(); fetch('/api/typing', post({ sid })); } });
+async function sendMsg() {
+  const text = $('txt').value.trim(); if (!text || !inChat) return;
+  $('txt').value = '';
+  const r = await fetch('/api/send', post({ sid, text }));
+  if (r.ok) add((await r.json()).text, 'me'); else if (r.status === 429) add('Slow down a little.', 'sys');
+}
+function onMatched(d) {
+  setState('chat'); $('log').innerHTML = '';
+  add('You are now chatting with a random stranger. Say hi!', 'sys');
+  if (d.mode === 'video') startPeer(d.initiator);
+}
+
+/* ---------- WebRTC (video) ---------- */
+const signal = data => fetch('/api/signal', post({ sid, data }));
+function startPeer(initiator) {
+  closePeer();
+  pc = new RTCPeerConnection({ iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] });
+  localStream.getTracks().forEach(t => pc.addTrack(t, localStream));
+  pc.ontrack = e => { $('remote').srcObject = e.streams[0]; };
+  pc.onicecandidate = e => { if (e.candidate) signal({ candidate: e.candidate }); };
+  if (initiator) pc.createOffer().then(o => pc.setLocalDescription(o)).then(() => signal({ sdp: pc.localDescription }));
+}
+async function onSignal(d) {
+  if (!pc) return;
+  try {
+    if (d.sdp) {
+      await pc.setRemoteDescription(d.sdp); remoteSet = true;
+      for (const c of pendingIce) await pc.addIceCandidate(c); pendingIce = [];
+      if (d.sdp.type === 'offer') { const a = await pc.createAnswer(); await pc.setLocalDescription(a); signal({ sdp: pc.localDescription }); }
+    } else if (d.candidate) {
+      if (remoteSet) await pc.addIceCandidate(d.candidate); else pendingIce.push(d.candidate);
+    }
+  } catch {}
+}
+function closePeer() {
+  if (pc) { pc.close(); pc = null; }
+  pendingIce = []; remoteSet = false; $('remote').srcObject = null;
+}
+
+/* ---------- report ---------- */
+['Sexual content', 'Harassment', 'Spam / ads', 'Underage user', 'Other'].forEach(r => {
+  const b = document.createElement('button'); b.textContent = r;
+  b.onclick = async () => { await fetch('/api/report', post({ sid, reason: r })); $('rep').classList.remove('show'); add('Report sent. Thank you.', 'sys'); start(); };
+  $('reasons').appendChild(b);
+});
+$('report').onclick = () => $('rep').classList.add('show');
+$('repX').onclick = () => $('rep').classList.remove('show');
+
+/* ---------- support ---------- */
+let token = localStorage.getItem('omegly_tok');
+if (!token) { token = [...crypto.getRandomValues(new Uint8Array(16))].map(x => x.toString(16).padStart(2, '0')).join(''); localStorage.setItem('omegly_tok', token); }
+let poll = null;
+async function loadSup() {
+  const j = await (await fetch('/api/support/get?token=' + token)).json();
+  const l = $('sLog'); l.innerHTML = '';
+  j.msgs.forEach(m => { const d = document.createElement('div'); d.className = 'm ' + (m.from === 'user' ? 'me' : 'st'); d.textContent = (m.from === 'admin' ? 'Admin: ' : '') + m.text; l.appendChild(d); });
+  l.scrollTop = l.scrollHeight;
+}
+$('supBtn').onclick = () => { $('sup').classList.add('show'); loadSup(); poll = setInterval(loadSup, 4000); };
+$('supX').onclick = () => { $('sup').classList.remove('show'); clearInterval(poll); };
+$('sSend').onclick = async () => {
+  const text = $('sTxt').value.trim(); if (!text) return; $('sTxt').value = '';
+  await fetch('/api/support/send', post({ token, text })); loadSup();
+};
+$('sTxt').addEventListener('keydown', e => { if (e.key === 'Enter') $('sSend').click(); });
+document.addEventListener('keydown', e => { if (e.key === 'Escape' && !$('gate').classList.contains('show') && sid) start(); });
+</script>
+</body>
+</html>

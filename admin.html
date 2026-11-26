@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex,nofollow">
+<title>Omegly Admin</title>
+<style>
+:root{--bg:#0f1220;--card:#181c30;--line:#2a2f4a;--txt:#e9ecff;--mut:#8b92b8;--acc:#5b8cff;--ok:#2ecc8f;--bad:#ff5b6e}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--txt);font:15px/1.45 system-ui,sans-serif;padding:16px;max-width:900px;margin:auto}
+h1,h2{margin:.4em 0}.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px;margin:12px 0}
+button,input{font:inherit;color:var(--txt);background:#232845;border:1px solid var(--line);border-radius:10px;padding:8px 14px}
+button{cursor:pointer}button.pri{background:var(--acc);border:0;font-weight:700}button.dng{color:var(--bad)}
+.stats{display:flex;gap:12px;flex-wrap:wrap}.stat{flex:1;min-width:110px;background:#232845;border-radius:10px;padding:10px;text-align:center}
+.stat b{display:block;font-size:26px}.mut{color:var(--mut);font-size:13px}.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.m{padding:6px 10px;border-radius:10px;margin:4px 0;max-width:85%;white-space:pre-wrap;word-wrap:break-word}
+.m.user{background:#2a2f4a}.m.admin{background:var(--acc);margin-left:auto}
+.big{font-size:17px;padding:14px 22px}.on{background:var(--ok)!important;color:#04150e;border:0}
+#app{display:none}
+</style>
+</head>
+<body>
+<div id="login" class="card"><h1>Omegly Admin</h1><div class="row"><input id="pw" type="password" placeholder="Admin password"><button class="pri" id="go">Log in</button></div><div class="mut" id="err"></div></div>
+<div id="app">
+  <h1>Omegly Admin</h1>
+  <div class="card"><div class="stats">
+    <div class="stat"><b id="sOn">0</b>online</div><div class="stat"><b id="sWait">0</b>waiting</div><div class="stat"><b id="sPair">0</b>chats now</div>
+  </div></div>
+  <div class="card"><h2>Boys / Girls filter</h2>
+    <p class="mut" id="gTxt"></p><button id="gBtn" class="big"></button></div>
+  <div class="card"><h2>Support inbox</h2><div id="support"></div></div>
+  <div class="card"><h2>Reports</h2><div id="reports"></div></div>
+  <div class="card"><h2>Banned IPs</h2><div id="bans"></div></div>
+</div>
+<script>
+const $ = id => document.getElementById(id);
+let key = sessionStorage.getItem('ak') || '', open = false, busy = false;
+const api = (p, body) => fetch('/api/admin/' + p, { method: body ? 'POST' : 'GET', headers: { 'x-admin-key': key, 'Content-Type': 'application/json' }, body: body ? JSON.stringify(body) : undefined });
+const el = (tag, txt, cls) => { const e = document.createElement(tag); if (txt != null) e.textContent = txt; if (cls) e.className = cls; return e; };
+async function login() {
+  key = $('pw').value || key;
+  const r = await api('overview');
+  if (!r.ok) { $('err').textContent = r.status === 429 ? 'Too many attempts. Wait 10 minutes.' : 'Wrong password'; return; }
+  sessionStorage.setItem('ak', key); $('login').style.display = 'none'; $('app').style.display = 'block'; render(await r.json());
+  setInterval(refresh, 5000);
+}
+async function refresh() { if (busy) return; const r = await api('overview'); if (r.ok) render(await r.json()); }
+$('go').onclick = login; $('pw').addEventListener('keydown', e => { if (e.key === 'Enter') login(); });
+if (key) login();
+
+function render(d) {
+  $('sOn').textContent = d.online; $('sWait').textContent = d.waiting; $('sPair').textContent = d.paired;
+  open = d.genderFilterOpen;
+  $('gTxt').textContent = open ? 'OPEN: everyone can choose Boys or Girls.' : 'LOCKED: users see a lock and must contact you.';
+  $('gBtn').textContent = open ? 'Lock it again' : 'Open it for everyone';
+  $('gBtn').className = 'big' + (open ? '' : ' pri');
+  const sup = $('support'); if (!document.activeElement || document.activeElement.tagName !== 'INPUT') { sup.innerHTML = '';
+    if (!d.support.length) sup.appendChild(el('div', 'No messages yet.', 'mut'));
+    d.support.forEach(th => {
+      const box = el('div'); box.style.cssText = 'border-top:1px solid var(--line);padding:10px 0';
+      box.appendChild(el('div', (th.unread ? '● NEW  ' : '') + 'User ' + th.token.slice(0, 6) + ' · ' + new Date(th.updated).toLocaleString(), 'mut'));
+      th.msgs.slice(-8).forEach(m => box.appendChild(el('div', m.text, 'm ' + m.from)));
+      const row = el('div', null, 'row'), inp = el('input'); inp.placeholder = 'Reply...'; inp.style.flex = '1';
+      const b = el('button', 'Reply', 'pri'); b.onclick = async () => { if (inp.value.trim()) { await api('reply', { token: th.token, text: inp.value }); refresh(); } };
+      inp.addEventListener('keydown', e => { if (e.key === 'Enter') b.click(); });
+      row.append(inp, b); box.appendChild(row); sup.appendChild(box);
+    }); }
+  const rep = $('reports'); rep.innerHTML = '';
+  if (!d.reports.length) rep.appendChild(el('div', 'No reports.', 'mut'));
+  d.reports.forEach(r => {
+    const box = el('div'); box.style.cssText = 'border-top:1px solid var(--line);padding:10px 0';
+    box.appendChild(el('div', new Date(r.t).toLocaleString() + ' · ' + r.reason + ' · reported IP: ' + r.reportedIp, 'mut'));
+    r.transcript.forEach(m => box.appendChild(el('div', (m.ip === r.reportedIp ? 'REPORTED: ' : 'reporter: ') + m.text, 'm user')));
+    const row = el('div', null, 'row');
+    const ban = el('button', 'Ban this IP', 'dng'); ban.onclick = async () => { await api('ban', { ip: r.reportedIp }); await api('dismiss', { id: r.id }); refresh(); };
+    const dis = el('button', 'Dismiss'); dis.onclick = async () => { await api('dismiss', { id: r.id }); refresh(); };
+    row.append(ban, dis); box.appendChild(row); rep.appendChild(box);
+  });
+  const bn = $('bans'); bn.innerHTML = '';
+  if (!d.bans.length) bn.appendChild(el('div', 'Nobody banned.', 'mut'));
+  d.bans.forEach(ip => { const row = el('div', null, 'row'); row.append(el('span', ip), Object.assign(el('button', 'Unban'), { onclick: async () => { await api('unban', { ip }); refresh(); } })); bn.appendChild(row); });
+}
+$('gBtn').onclick = async () => { busy = true; await api('gender', { open: !open }); busy = false; refresh(); };
+</script>
+</body>
+</html>
